@@ -1,0 +1,41 @@
+# Instructor-provided materials: do not publish.
+/proj5_starter_code.ipynb
+/proj5.pdf
+
+# Local Python/editor environments and caches.
+/.venv/
+/venv/
+/.vscode/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Reproducible datasets, temporary files, and local model runs.
+/generated_data/
+/candle_results/
+/mistral_med_results/
+/saved_mistral_med_adapter/
+/tmp/
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.gguf
+*.ckpt
+*.onnx
+*.log
+
+# Local planning/source logs and notebook exports.
+/IMPLEMENTATION_PLAN.md
+/proj5doc.md
+/proj5doc.pdf
+/proj5.html
+/output/
+
+# Packaging outputs.
+/build/
+/dist/
+*.egg-info/
