@@ -151,8 +151,8 @@ alone; that uncertainty must be analyzed in the experiment.
 
 The CPU evaluation module implements four independent metrics: recoverability accuracy,
 ordered-operation accuracy on oracle-positive examples, strict full-answer
-accuracy, and format validity. Routine scoring never executes tools. A separate
-explicit final section executes model-predicted plans and reports reconstruction,
+accuracy, and format validity. Routine scoring never executes tools. The explicit
+`dataset.execute_predictions()` API executes model-predicted plans and reports reconstruction,
 false omissions, negative repair attempts, execution failures, and retained coverage.
 
 ## Project scope
@@ -160,9 +160,9 @@ false omissions, negative repair attempts, execution failures, and retained cove
 `proj5.ipynb` retains the starter's Transformers/PEFT Mistral-7B framework and
 contains visible training and experiment presentation. There is no small-training
 prerequisite: it trains the configured primary rank directly from offline labels.
-Five fixed validation cases are compared before and after SFT. Separate rank
-8/16/32 validation and full-test jobs are currently enabled in notebook settings.
-Choose the primary rank using validation results, then report the test comparison.
+Five fixed validation cases are compared before and after SFT. Rank experiments are performed manually by changing the rank and rerunning the
+notebook. Training/validation charts read saved Trainer history directly. A small
+held-out generation sample is optional; no full-dataset inference job gates results.
 No model improvement or TAMU compatibility is claimed until actually measured.
 
 The repository includes this library, its tests, the notebook, and the original

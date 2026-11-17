@@ -1,6 +1,7 @@
 """The short notebook trains cached labels and compares five fixed examples."""
 import json
 import math
+import random
 import tempfile
 import time
 import unittest
@@ -10,9 +11,9 @@ from unittest.mock import Mock
 from notebook_helpers import load_tag, load_definitions
 
 
-def records():
+def records(count=5):
     return [{'id':str(i),'input':'corrupted '+str(i),
-             'target':{'recoverable':False,'operations':[]}} for i in range(5)]
+             'target':{'recoverable':False,'operations':[]}} for i in range(count)]
 
 
 def save_json(path,value):
@@ -54,6 +55,7 @@ class SFTWorkflowTests(unittest.TestCase):
             save_json(destination/'before.json',{'ids':[r['id'] for r in records()],
                 'prompts':[r['input'] for r in records()],'predictions':['base']*5})
             namespace=demo_namespace(destination)
+            (destination/'rank_16').mkdir()
             namespace.update({'LORA_RANK':16,'PeftModel':SimpleNamespace(from_pretrained=Mock())})
             load_tag('after_run',namespace)
             self.assertEqual([r['id'] for r in namespace['predict'].call_args.args[1]],[str(i) for i in range(5)])
@@ -61,12 +63,31 @@ class SFTWorkflowTests(unittest.TestCase):
             namespace['evaluate'].assert_not_called()
 
     def test_disabled_extra_jobs_do_not_load_models_or_train(self):
-        for tag,flag in [('rank_study_run','RUN_RANK_STUDY'),('full_comparison_run','RUN_FULL_TEST_COMPARISON')]:
-            with self.subTest(tag=tag):
-                namespace={flag:False,'load_base':Mock(),'train_adapter':Mock()}
-                load_tag(tag,namespace)
-                namespace['load_base'].assert_not_called()
-                namespace['train_adapter'].assert_not_called()
+        namespace={'COMPARISON_EXAMPLES':0,'load_base':Mock(),'train_adapter':Mock()}
+        load_tag('sample_comparison',namespace)
+        namespace['load_base'].assert_not_called()
+        namespace['train_adapter'].assert_not_called()
+
+    def test_optional_generation_uses_only_the_requested_same_sample_for_both_models(self):
+        import pandas as pd
+        from candleprep.evaluation import score_predictions
+        with tempfile.TemporaryDirectory() as temporary:
+            destination=Path(temporary);(destination/'rank_16').mkdir()
+            namespace={'COMPARISON_EXAMPLES':3,'RESULTS':destination,'SEED':4820,'LORA_RANK':16,
+                'random':random,'pd':pd,'display':Mock(),'dataset':SimpleNamespace(records=Mock(return_value=records(100))),
+                'load_base':Mock(),'PeftModel':SimpleNamespace(from_pretrained=Mock()),'release_gpu':Mock(),
+                'predict':Mock(return_value=['{"recoverable":false,"operations":[]}']*3),
+                'score_predictions':score_predictions,'save_json':save_json,'train_adapter':Mock()}
+            load_tag('sample_comparison',namespace)
+            calls=namespace['predict'].call_args_list
+            self.assertEqual(len(calls),2)
+            self.assertEqual(len(calls[0].args[1]),3)
+            self.assertEqual(calls[0].args[1],calls[1].args[1])
+            namespace['dataset'].records.assert_called_once_with('test')
+            namespace['train_adapter'].assert_not_called()
+            saved=json.loads((destination/'rank_16/sample_3.json').read_text())
+            self.assertEqual(saved['base']['ids'],saved['selected']['ids'])
+            self.assertEqual(saved['selected']['metrics']['examples'],3)
 
     def test_real_training_function_uses_all_cached_pairs_saves_and_reuses_adapter(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -78,6 +99,7 @@ class SFTWorkflowTests(unittest.TestCase):
             model.save_pretrained.side_effect=save_adapter
             trainer=Mock(model=model,state=SimpleNamespace(global_step=625,epoch=1,save_to_json=Mock()))
             trainer.train.return_value=SimpleNamespace(training_loss=0.028)
+            trainer.evaluate.return_value={'eval_loss':0.05,'eval_target_token_accuracy':0.9}
             cuda=SimpleNamespace(is_bf16_supported=lambda:True,reset_peak_memory_stats=Mock(),
                 max_memory_allocated=lambda:5*1024**3,max_memory_reserved=lambda:6*1024**3)
             namespace={'RESULTS':destination,'settings':{},'json':json,'math':math,'time':time,
@@ -86,20 +108,26 @@ class SFTWorkflowTests(unittest.TestCase):
                 'prepare_model_for_kbit_training':lambda m:m,'get_peft_model':lambda m,c:m,
                 'LoraConfig':Mock(),'TrainingArguments':Mock(),'Trainer':Mock(return_value=trainer),
                 'DataCollatorForSeq2Seq':Mock(),'tokenizer':Mock(),'train_dataset':range(10000),
-                'torch':SimpleNamespace(cuda=cuda),'release_gpu':Mock()}
+                'torch':SimpleNamespace(cuda=cuda),'release_gpu':Mock(),'VALIDATION_EVERY':100,
+                'validation_dataset':range(64),'validation_metrics':Mock(),'validation_token_ids':Mock()}
             load_definitions('training_helpers',namespace)
             adapter=namespace['train_adapter'](16)
             namespace['train_adapter'](16)
             namespace['load_base'].assert_called_once()
             trainer.train.assert_called_once_with(resume_from_checkpoint=None)
+            trainer.evaluate.assert_called_once_with()
             self.assertEqual(len(namespace['Trainer'].call_args.kwargs['train_dataset']),10000)
             args=namespace['TrainingArguments'].call_args.kwargs
             self.assertTrue(args['gradient_checkpointing'])
             self.assertFalse(args['disable_tqdm'])
             self.assertEqual(args['gradient_accumulation_steps'],16)
+            self.assertEqual(args['eval_strategy'],'steps')
+            self.assertEqual(args['per_device_eval_batch_size'],1)
+            self.assertEqual(len(namespace['Trainer'].call_args.kwargs['eval_dataset']),64)
             report=json.loads((adapter.parent/'training.json').read_text())
             self.assertEqual(report['steps'],625)
             self.assertEqual(report['peak_reserved_gib'],6)
+            self.assertEqual(report['validation']['eval_target_token_accuracy'],0.9)
             model.generate.assert_not_called()
 
 

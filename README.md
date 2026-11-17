@@ -45,11 +45,11 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 13 code cells / about 280 code lines (including a separate cleanup
-definition cell): package installation; preparation;
-data/label previews; model settings and cleanup; tokenization/model helpers; five
-base-model examples; visible starter-style LoRA training; primary training;
-the same five examples afterward; rank comparison; full test comparison; results.
+The notebook has 12 code cells / about 300 code lines: package installation;
+preparation and data/label previews; settings and cleanup; tokenization/model
+helpers; five base-model examples; visible starter-style LoRA training; primary
+training; the same five examples afterward; immediate saved-history charts; and
+an optional small generated-answer comparison.
 
 Setup disables MathJax for styled data tables so dollar signs in task text and
 synthetic currency values display literally. For an already open notebook, run
@@ -68,14 +68,40 @@ checkpoint. New simplified runs use `candle_results/simple_sft_v2/`; earlier
 `full_sft_v1/` adapters/results remain untouched. Settings changes require a new
 RESULTS directory.
 
-Configuration settings use one variable per line. `LORA_RANK` chooses the primary
-adapter; `RANKS` lists the separate ranks for the assignment's required comparison.
-The handout requires exploring rank values, but does not prescribe 8/16/32.
+Configuration settings use one variable per line. `LORA_RANK` chooses the
+single adapter trained by this run. There is no automatic rank sweep. For the
+assignment's rank experiment, change `LORA_RANK` and rerun Sections 1–9; ranks
+are saved separately. Use a new `RESULTS` directory for changed training
+hyperparameters such as learning rate or epoch count, and document observations.
+The handout requires rank exploration but does not prescribe 8/16/32 or a sweep.
 
-Five validation cases are fixed before generation and reused afterward. Rank
-8/16/32 validation studies and base/adapter full-test inference remain separate
-long jobs; both switches are currently True. They do not create training labels
-or delay primary SFT. Change a switch, rerun settings, then execute its job cell.
+Five validation cases are fixed before generation and reused afterward. Their
+before/after metrics are saved, with trained results stored per rank. Section 10
+reads saved Trainer history and metric files to plot training/validation loss,
+teacher-forced target-token accuracy, and the five-case generated-answer results.
+No model, inference job, or optional comparison is needed to draw those charts.
+
+New runs use `VALIDATION_EXAMPLES=64` fixed validation cases, every
+`VALIDATION_EVERY=100` optimizer steps and at training completion. Trainer makes
+teacher-forced forward passes against cached labels; it does not generate answers
+or update weights during validation. Only argmax token IDs are retained for
+metrics, with evaluation batch size 1. Target-token accuracy excludes prompt and
+padding tokens and accounts for the causal next-token shift. It is a different
+metric from complete generated-JSON correctness.
+
+Older completed adapters are reused. Their training curves remain displayable;
+if they did not record validation loss/accuracy, those missing metrics are marked
+as unavailable. The notebook does not fabricate a validation trajectory or rerun
+training to create one. Rerunning Section 6 reuses frozen responses and writes
+its small baseline metric file; Section 9 saves the five trained-case metrics.
+
+Section 11 is optional: `COMPARISON_EXAMPLES=0` skips extra generation; set it to
+25 for 25 deterministic held-out cases per model. The original base and trained
+adapter receive the same sample. Results record case IDs, count, predictions,
+and metrics under the selected rank. This does not claim evaluation of all
+2,000 test examples. The prior full-dataset generation and dependent final-tool
+execution gate have been removed from the notebook; candleprep's explicit
+repair-execution API remains available separately.
 
 Standard Trainer progress reports steps/loss; inference reports examples/ETA.
 After an interruption has stopped, rerun the Manual GPU cleanup cell. It defines
@@ -100,7 +126,8 @@ reserved peaks. No full training has been rerun for this notebook refactor.
 
 ## Verification and package release
 
-All 44 tests pass. A clean working directory with no root CSV downloaded and generated all 13,000
+The test suite covers data preparation, training feedback, and the lightweight workflow.
+A clean working directory with no root CSV downloaded and generated all 13,000
 examples successfully. Artifact hashes match the earlier dataset exactly.
 Package tests cover deterministic reconstruction, split isolation, checksum/cache
 validation, public-feature separation, scoring, displays, and mocked training.

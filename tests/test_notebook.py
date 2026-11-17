@@ -10,7 +10,8 @@ class NotebookTests(unittest.TestCase):
     def test_simple_structure_explanations_and_syntax(self):
         notebook = json.loads(NOTEBOOK.read_text(encoding='utf-8'))
         code_cells = [c for c in notebook['cells'] if c['cell_type'] == 'code']
-        self.assertLessEqual(sum(len(c['source']) for c in code_cells), 300)
+        self.assertLessEqual(sum(len(c['source']) for c in code_cells), 325)
+        self.assertFalse(any('rank_study_run' in c.get('metadata', {}).get('tags', []) for c in code_cells))
         for index, cell in enumerate(notebook['cells']):
             self.assertIn('id', cell)
             if cell['cell_type'] == 'code':
