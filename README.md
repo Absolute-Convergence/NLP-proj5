@@ -45,7 +45,7 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 13 code cells / 266 code lines (including a separate cleanup
+The notebook has 13 code cells / about 280 code lines (including a separate cleanup
 definition cell): package installation; preparation;
 data/label previews; model settings and cleanup; tokenization/model helpers; five
 base-model examples; visible starter-style LoRA training; primary training;
@@ -78,7 +78,15 @@ long jobs; both switches are currently True. They do not create training labels
 or delay primary SFT. Change a switch, rerun settings, then execute its job cell.
 
 Standard Trainer progress reports steps/loss; inference reports examples/ETA.
-After an interruption has stopped, run `free_gpu_resources()` in a new cell.
+After an interruption has stopped, rerun the Manual GPU cleanup cell. It defines
+and calls `free_gpu_resources()` immediately; redefining the function alone does
+not run cleanup. You can also call `free_gpu_resources()` in a new cell. Cleanup
+also clears bitsandbytes' global optimizer registrations, which can retain model
+layers after an interrupted training run, then collects remaining reference cycles
+and releases cuBLAS workspace caches when supported by PyTorch. The
+same cache-release function runs automatically after each model phase. The
+printed allocation/reservation describes the current PyTorch kernel; CUDA context
+and other applications may still use memory reported by Task Manager.
 After a kernel restart, rerun setup through Section 5, Section 6 (it reuses saved
 baseline responses), and the Section 7 training-function definition. Section 9
 can then reload the saved adapter without retraining.
