@@ -45,11 +45,16 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 13 code cells / 264 code lines (including a separate cleanup
+The notebook has 13 code cells / 266 code lines (including a separate cleanup
 definition cell): package installation; preparation;
 data/label previews; model settings and cleanup; tokenization/model helpers; five
 base-model examples; visible starter-style LoRA training; primary training;
 the same five examples afterward; rank comparison; full test comparison; results.
+
+Setup disables MathJax for styled data tables so dollar signs in task text and
+synthetic currency values display literally. For an already open notebook, run
+`import pandas as pd; pd.set_option("styler.html.mathjax", False)` and rerun the
+display cell. Cached baseline responses are reused; no retraining is required.
 
 The SFT dataset contains 10,000 corrupted-input/verified-JSON-label pairs.
 Deterministic reconstruction proves positive labels offline. Originals/history

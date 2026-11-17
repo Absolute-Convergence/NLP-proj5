@@ -64,6 +64,45 @@ class NotebookTests(unittest.TestCase):
             self.assertEqual(received, TASK+record['input'])
             self.assertEqual(received, user_text({**record,'target':'SENTINEL','original':'SENTINEL'}))
 
+    def test_currency_prompt_is_displayed_as_copyable_text_without_mathjax(self):
+        import pandas as pd
+        from html.parser import HTMLParser
+        from unittest.mock import patch
+        from candleprep.display import display_predictions
+        from candleprep.datasets import load_jsonl
+
+        class TextParser(HTMLParser):
+            def __init__(self):
+                super().__init__(convert_charrefs=True)
+                self.text = []
+                self.table_classes = []
+            def handle_data(self, data):
+                self.text.append(data)
+            def handle_starttag(self, tag, attrs):
+                if tag == 'table':
+                    self.table_classes.extend(dict(attrs).get('class', '').split())
+
+        notebook = json.loads(NOTEBOOK.read_text(encoding='utf-8'))
+        setup = ''.join(next(c['source'] for c in notebook['cells']
+                             if 'installation' in c.get('metadata', {}).get('tags', [])))
+        setup = '\n'.join(line for line in setup.splitlines() if not line.startswith('%'))
+        record = next(r for r in load_jsonl(NOTEBOOK.parent/'generated_data/v1/validation.jsonl')
+                      if r['id'] == 'validation-000007')
+        prompt = user_text(record)
+        self.assertEqual(prompt.count('$'), 2)
+        self.assertNotIn('\\', prompt)
+        displayed = []
+        with pd.option_context('styler.html.mathjax', True), patch('IPython.display.display', side_effect=displayed.append):
+            exec(setup, {})
+            self.assertIs(pd.get_option('styler.html.mathjax'), False)
+            display_predictions([record], [json.dumps(record['target'])])
+            parser = TextParser()
+            parser.feed(displayed[0].to_html())
+        self.assertIn('tex2jax_ignore', parser.table_classes)
+        self.assertIn('mathjax_ignore', parser.table_classes)
+        self.assertIn(prompt, ''.join(parser.text))
+        self.assertEqual(user_text(record), prompt)
+
 
 if __name__ == '__main__':
     unittest.main()
