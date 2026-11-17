@@ -24,9 +24,12 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Absolute-Convergence/NLP-proj5-dataset"
-Documentation = "https://github.com/Absolute-Convergence/NLP-proj5-dataset/blob/main/candleprep/README.md"
-Issues = "https://github.com/Absolute-Convergence/NLP-proj5-dataset/issues"
+Repository = "https://github.com/Absolute-Convergence/NLP-proj5"
+Documentation = "https://github.com/Absolute-Convergence/NLP-proj5/blob/main/candleprep/README.md"
+Issues = "https://github.com/Absolute-Convergence/NLP-proj5/issues"
+
+[project.optional-dependencies]
+notebook = ["pandas>=2", "matplotlib>=3.8", "ipython>=8", "datasets>=3", "tqdm>=4"]
 
 [project.scripts]
 candleprep = "candleprep.__main__:main"

@@ -1,113 +1,68 @@
-# Publishing candleprep
+# Publishing candleprep 0.2.0
 
-The first prepared release is `candleprep` version **0.1.0**, licensed under MIT.
-It requires Python 3.11 or newer and has no runtime dependencies. The version
-comes from `candleprep/__init__.py`.
+Version 0.2.0 adds the CandleDataset facade, pinned/checksummed source download,
+optional notebook displays, and CPU instruction scoring. The existing generator
+and CLI remain available. Core preparation still has no runtime dependencies;
+the optional notebook extra supplies display/dataset utilities.
 
-## Prepared release verification
+Release [0.2.0 is published](https://pypi.org/project/candleprep/0.2.0/), and the
+published wheel/source archive checksums match the checked local builds. Version
+0.1.0 is yanked. The notebook's pinned `candleprep[notebook]==0.2.0` cell is ready.
+The package version comes from `candleprep/__init__.py`.
 
-Both archives pass `twine check --strict` and the distribution-content audit.
-The wheel installed into a clean Python 3.11.9 environment; the source archive
-built and installed into a clean Python 3.13.14 environment. In both environments,
-all 26 package-relevant tests passed, the installed API reproduced the complete
-13,000-example dataset and its artifact hashes, and the installed CLI generated
-a 300-example preview. Imports resolved to the installed package, with no Torch
-import or runtime dependency installation. These checks were on Windows;
-execution on TAMU's Linux environment remains to be verified.
+The build/upload instructions below are retained for future releases. Do not
+re-upload 0.2.0; increment the version before the next package release.
 
-| File | Bytes | SHA-256 |
-|---|---:|---|
-| `candleprep-0.1.0-py3-none-any.whl` | 30,105 | `2c7d66fea3bebd08c9ca94efa835b3a45d65fbd641f33ac6db9dc40617cb63ef` |
-| `candleprep-0.1.0.tar.gz` | 24,896 | `093722f08671a70de0df7a8b4998f301b8d3cf62ec40081e71832de181f729a8` |
+## Verified locally
 
-Release 0.1.0 was published by the user and is available at
-<https://pypi.org/project/candleprep/0.1.0/>. The hashes above describe the initial
-local build; rebuilding can change archive hashes. Published files have their
-own checksums on PyPI. Do not re-upload an already published version's filenames.
+All 44 tests pass. Both 0.2.0 archives pass `twine check --strict` and the
+distribution-content audit. The wheel installs into a clean Python 3.11
+environment, imports without ML/display dependencies, and downloads/prepares
+data outside the source checkout. A separate full 13,000-example generation in
+a working directory without the root CSV reproduced all earlier dataset artifact
+hashes. The underlying corruption/oracle algorithms and task prompt are unchanged.
+Full GPU training has not been rerun for this refactor.
 
 ## Build and check
 
-Use a separate tooling environment if build tools are not already installed.
-This avoids changing the notebook's working CUDA environment.
-
-Windows PowerShell:
+Use the separate tooling environment so the working CUDA environment is unchanged.
+From the repository root in PowerShell:
 
 ```powershell
-python -m venv .packaging-venv
-.\.packaging-venv\Scripts\python -m pip install build twine
 .\.packaging-venv\Scripts\python -m build
-.\.packaging-venv\Scripts\python -m twine check --strict dist/candleprep-0.1.0.tar.gz dist/candleprep-0.1.0-py3-none-any.whl
+.\.packaging-venv\Scripts\python -m twine check --strict dist/candleprep-0.2.0.tar.gz dist/candleprep-0.2.0-py3-none-any.whl
 python tools/check_distribution.py
 ```
 
-Linux/macOS:
+If that environment is missing, create it with `python -m venv .packaging-venv`
+and install build tools with `.\.packaging-venv\Scripts\python -m pip install build twine`.
+On Linux/macOS, use `.packaging-venv/bin/python` instead.
 
-```bash
-python3 -m venv .packaging-venv
-.packaging-venv/bin/python -m pip install build twine
-.packaging-venv/bin/python -m build
-.packaging-venv/bin/python -m twine check --strict dist/candleprep-0.1.0.tar.gz dist/candleprep-0.1.0-py3-none-any.whl
-python3 tools/check_distribution.py
-```
+The checker/uploader select only the version in the current source, so retained
+0.1.0 artifacts are not accidentally uploaded. Archives contain the package,
+package README, license, and build metadata; no dataset, CSV, notebook, model,
+instructor materials, tests, or local credentials are included.
 
-The wheel and source archive contain only package code, package documentation,
-licensing, and build metadata. They exclude the notebook, CSV, generated data,
-tests, instructor materials, environments, model artifacts, and local logs.
-`dist/` and the tooling environment stay out of Git.
-
-## Upload when ready
-
-For the first upload of this new project, create a production PyPI token with
-scope **Entire account (all projects)** at <https://pypi.org/manage/account/token/>.
-A token scoped to another project cannot create `candleprep`. Once the project
-exists, use a token scoped specifically to `candleprep` for later uploads.
-
-Run the helper below from the repository root. It validates both artifacts and
-always prompts for a token, overriding cached keyring and `.pypirc` credentials.
-Enter the token at the hidden prompt. It is passed to Twine in memory, without
-writing it to source, configuration, or the shell command/history. Existing saved
-credentials are left untouched.
-
-Windows PowerShell:
+## Upload
 
 ```powershell
 .\.packaging-venv\Scripts\python tools/upload_package.py
 ```
 
-Linux/macOS:
+Enter a production PyPI token authorized for `candleprep` at the hidden local
+prompt. The helper checks the two current-version archives and passes the entered
+token to Twine in memory, overriding keyring/config credentials. It does not
+write the token to source or configuration. An empty token cancels the upload.
+The earlier 403 project-scope error means a token was not authorized for this
+project; use a candleprep-scoped token or an authorized account-wide token.
+Never paste a token into the notebook or commit it to Git.
 
-```bash
-.packaging-venv/bin/python tools/upload_package.py
+After successful upload, verify installation from outside a source checkout:
+
+```powershell
+python -m pip install "candleprep[notebook]==0.2.0"
+python -c "from candleprep import CandleDataset; print(CandleDataset.prepare().summary())"
 ```
 
-These commands upload to production PyPI. Building and checking do not publish
-anything. A successful first upload creates the PyPI project; the name is not
-reserved before that. If a version has already been published, increment
-`__version__`, rebuild, and upload the new version's exact files.
-
-If an earlier direct `twine upload` reports `password set from keyring`, it reused
-a saved token instead of prompting. An error saying `project-scoped token is not
-valid for project: 'candleprep'` identifies the wrong token scope. Use the helper
-with a correctly scoped token; the package does not need rebuilding for this error.
-
-## Install elsewhere after publication
-
-```bash
-python -m pip install candleprep==0.1.0
-candleprep --version
-```
-
-In a notebook, use `%pip install candleprep==0.1.0` once, then restart the kernel
-if required. The package does not install a model, notebook, or source CSV. Get
-the notebook and CSV from the GitHub repository, or provide your own matching
-CSV. Dataset generation then uses the same API everywhere:
-
-```python
-from candleprep.datasets import generate_dataset
-
-generate_dataset("TVC_GOLD, 360.csv", "generated_data/v1")
-```
-
-References: [Python packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/),
-[pyproject metadata](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/),
-[Twine](https://twine.readthedocs.io/en/stable/).
+This downloads and verifies the original source CSV automatically. First use
+requires internet access; cache reuse does not. This step does not train a model.

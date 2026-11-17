@@ -1,140 +1,91 @@
 # Candle-data repair instructions with PEFT-LoRA
 
-This project creates synthetic candle-data corruption examples and trains a
-Mistral-7B model to predict whether a complete example is recoverable and which
-registered recovery functions to apply. The output is a JSON instruction object:
+This project prepares synthetic candle-data corruptions and fine-tunes Mistral-7B
+to output a JSON tool-use plan:
 
 ```json
 {"recoverable": true, "operations": ["repair_number_spelling", "parse_number_words"]}
 ```
 
-Non-Recoverable examples use `{"recoverable": false, "operations": []}` and
-prescribe omission of the complete input window during cleaning. They remain in
-the supervised dataset.
+Negative examples use `{"recoverable": false, "operations": []}` and prescribe
+omitting the entire window. They remain in supervised training.
 
-## Included files
+## Run the notebook
 
-- `candleprep/`: standalone CPU corruption, recovery, oracle, and dataset library.
-- `proj5.ipynb`: dataset inspection, scoring, and guarded Transformers/PEFT experiments.
-- `tests/`: corruption, oracle, generation, scoring, and notebook checks.
-- `TVC_GOLD, 360.csv`: unchanged source candle data.
+Open `proj5.ipynb` in a CUDA-enabled Python environment with the existing
+PyTorch/Transformers/PEFT/bitsandbytes/Accelerate training dependencies. The
+verified environment used Python 3.11.9, PyTorch 2.10.0+cu128, Transformers 5.8.1,
+PEFT 0.21.3, and bitsandbytes 0.50.2. Preserve a working CUDA installation.
 
-The instructor's starter notebook and assignment PDF are excluded. Environments,
-generated datasets, model weights/checkpoints, temporary files, and local logs
-are also excluded by `.gitignore`.
+The notebook starts by installing the published `candleprep[notebook]==0.2.0`,
+then uses just:
 
-## Generate the dataset
+```python
+from candleprep import CandleDataset
 
-The CPU library uses Python's standard library. Install a source checkout with
-`python -m pip install .`, or install the published package with
-`python -m pip install candleprep==0.1.0`. Requires Python 3.11 or newer.
-Run from this repository's root:
-
-```powershell
-python -m candleprep "TVC_GOLD, 360.csv" --output generated_data/v1
+dataset = CandleDataset.prepare(output_dir="generated_data/v1", seed=4820)
+dataset.display_samples(rows=5)
+dataset.display_labels(rows=5)
 ```
 
-This creates 10,000 training, 1,000 validation, and 2,000 test examples, plus
-oracle reference sidecars and a reproducibility manifest. Source records are
-split chronologically before creating four-record windows and corruption variants.
-The original CSV is never modified. Existing generated files are protected from
-overwrite; use another output directory to generate a separate dataset.
+No manual CSV download is needed. The package downloads the original CSV from a
+pinned commit of this public repository, verifies its SHA-256, and caches it
+inside the dataset directory. Existing matching datasets are verified and reused.
+The root CSV remains in Git as the public download source, but the notebook does
+not read the working directory's copy. See [the package README](candleprep/README.md).
 
-See [the library README](candleprep/README.md) for supported operators, recovery
-rules, output contracts, and limitations.
+## Notebook flow
 
-## Run the notebook and checks
+The notebook has 13 code cells / 256 code lines (including a separate cleanup
+definition cell): package installation; preparation;
+data/label previews; model settings and cleanup; tokenization/model helpers; five
+base-model examples; visible starter-style LoRA training; primary training;
+the same five examples afterward; rank comparison; full test comparison; results.
 
-Open `proj5.ipynb` using a Python environment with the existing Transformers,
-Datasets, PEFT, PyTorch/CUDA, bitsandbytes, Accelerate, pandas, matplotlib, and
-IPython dependencies. The local verification environment used Python 3.11.9,
-PyTorch 2.10.0+cu128, Transformers 5.8.1, Datasets 5.2.0, PEFT 0.21.3, and
-bitsandbytes 0.50.2. Preserve a working CUDA installation when configuring a new
-machine; the CPU generator itself needs none of these ML packages.
+The SFT dataset contains 10,000 corrupted-input/verified-JSON-label pairs.
+Deterministic reconstruction proves positive labels offline. Originals/history
+never enter model prompts. Target-only loss masking preserves full answers.
+Trainer consumes cached labels without generating responses during training.
 
-The notebook shows the first, middle, and last five original rows and synthetic
-examples. Section 4 constructs the SFT dataset and displays deterministic repair
-verification alongside its JSON labels. It can generate missing data with one
-library call. The later model cells load the untrained base, show three fixed
-input/output examples, train on all 10,000 pairs, and show five examples after
-SFT: the same three plus two additional repair cases. Run cells in order; the
-full GPU training cells can take several hours.
-The final model-directed repair demonstration remains separately disabled.
+Rank-16 primary training uses batch size 1, accumulation 16, one epoch / 625
+optimizer steps, gradient checkpointing, and checkpoints every 100 steps.
+Completed adapters are reused and interrupted training resumes from the latest
+checkpoint. New simplified runs use `candle_results/simple_sft_v2/`; earlier
+`full_sft_v1/` adapters/results remain untouched. Settings changes require a new
+RESULTS directory.
 
-The main training path uses the cached input/JSON-label pairs directly with
-Trainer; it does not generate responses to construct training labels. One
-rank-16 adapter is trained by default. Section 9 generates three baseline
-responses; Section 11 generates five trained-model inspection responses, with
-paired metrics kept separate from five-case inspection metrics. Full rank studies and full held-out
-response generation are explicitly enabled evaluation jobs in Section 12,
-separate from dataset construction and SFT.
+Five validation cases are fixed before generation and reused afterward. Rank
+8/16/32 validation studies and base/adapter full-test inference remain separate
+long jobs; both switches are currently True. They do not create training labels
+or delay primary SFT. Change a switch, rerun settings, then execute its job cell.
 
-After editing `RUN_RANK_STUDY` or `RUN_FULL_TEST_COMPARISON`, rerun the
-configuration cell, then execute the corresponding Section 12 cell. Editing
-notebook text does not update kernel variables or launch those jobs. Both the
-configuration and optional cells print the active values.
+Standard Trainer progress reports steps/loss; inference reports examples/ETA.
+After an interruption has stopped, run `free_gpu_resources()` in a new cell.
+After a kernel restart, rerun setup through Section 5, Section 6 (it reuses saved
+baseline responses), and the Section 7 training-function definition. Section 9
+can then reload the saved adapter without retraining.
 
-The completed rank-16 run recorded a 5.90 GiB PyTorch allocation peak; its live
-kernel showed a 6.17 GiB reservation peak after training and inference. Whole-device
-peak usage was not logged, so these measurements do not certify a 10-GB device.
-The free-memory guard is configurable as `MIN_FREE_VRAM_GIB=7.5`, replacing the
-previous 12-GiB requirement. Keep the current batch and sequence settings for a
-10-GB trial; other GPUs and ranks still need verification. Future training reports
-record both allocated and reserved peaks.
+The prior rank-16 run recorded 5.90 GiB peak PyTorch allocation and the live
+kernel showed 6.17 GiB peak reservation afterward. Whole-device peak was not
+logged; the other 10-GB machine still requires verification. The simplified
+loader reports available memory and uses the same low-memory configuration,
+without an arbitrary minimum-capacity rejection. Training saves allocated and
+reserved peaks. No full training has been rerun for this notebook refactor.
 
-Long inference phases show named example/token progress, elapsed time, rate, and
-ETA. Training reports optimizer steps and accumulation activity, with loss on the
-first step and every five steps. Progress code applies to new calls after the
-updated helper cells are executed; it cannot change an already-running call.
+## Verification and package release
 
-After interrupting a run, wait for the kernel to become idle and run
-`free_gpu_resources()` in a new cell. The function is defined near the top of
-the notebook. It drops the notebook's live model/training
-references, clears cached Python results and exception traceback locals, then
-collects garbage and releases unused CUDA cache. It prints remaining allocated
-and reserved memory. Dataset variables and saved checkpoints remain available;
-rerun the interrupted execution cell to reload its model. If CUDA still reports
-an error, restart the kernel.
+All 44 tests pass. A clean working directory with no root CSV downloaded and generated all 13,000
+examples successfully. Artifact hashes match the earlier dataset exactly.
+Package tests cover deterministic reconstruction, split isolation, checksum/cache
+validation, public-feature separation, scoring, displays, and mocked training.
+The cached tokenizer check covers all 10,000 training examples (longest: 1,019
+tokens within the 1,536 limit). Run `python -m unittest discover -s tests -v`.
 
-After a kernel restart, the adapter files remain saved but the setup variables
-are gone. Follow the checklist at the start of Section 11: rerun Sections 1–8
-and the Section 9 helper-definition cell, then run Section 11. Skip the actual
-baseline-generation and SFT execution cells. Also restore the Section 10
-training-function definition before starting a rank study. The later execution
-cells now explain missing prerequisites instead of failing on the first helper name.
+Release [0.2.0 is published on PyPI](https://pypi.org/project/candleprep/0.2.0/)
+and matches the checked local archives. Version 0.1.0 has been yanked; use 0.2.0.
+See [PUBLISHING.md](PUBLISHING.md) for building, checking, and uploading.
 
-After generating the dataset, run:
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-The notebook tokenizer test additionally requires the Mistral tokenizer in the
-local Hugging Face cache. Loading the notebook's tokenizer once prepares that
-cache. Model experiments require a CUDA GPU and downloaded model weights.
-
-## Verification status
-
-All 41 tests pass. All 13,000 generated inputs are unique, source
-rows do not cross dataset splits, and all 8,016 oracle-positive examples
-reconstruct their complete references. Regeneration reproduces artifact hashes.
-
-The initial pipeline check is complete and its small training path has been
-removed from the notebook. Three real untrained-model validation responses are
-saved with exact prompts and targets; all three failed the strict JSON/output
-contract. This is a small illustrative baseline, not a full test-set result.
-Rank-16 SFT completed all 625 steps on 10,000 examples (one epoch), with training
-loss 0.02827. All three matched trained-model outputs satisfied the strict answer
-contract; the before/after demonstration remains too small to estimate held-out
-accuracy. Full quantitative evaluation, rank comparisons, and TAMU A30
-verification remain pending. Model artifacts and checkpoints stay outside Git.
-The expanded five-case after-SFT inspection also matched all expected JSON
-answers. The suite covers notebook syntax, example selection/display, SFT workflow,
-restart prerequisites, interruption cleanup, progress feedback, and the free-memory guard.
-
-## Package release
-
-The standalone library is MIT licensed. See [PUBLISHING.md](PUBLISHING.md) for
-building, checking, uploading, and installing the package on another machine.
-The PyPI distributions exclude the CSV, notebook, instructor materials, and all
-large/generated artifacts.
+Instructor starter code/PDF, datasets, model weights/checkpoints, environments,
+temporary files, and local logs remain excluded from Git. Package distributions
+contain no CSV, notebook, instructor materials, or generated/model artifacts.
+The CPU library is MIT licensed.

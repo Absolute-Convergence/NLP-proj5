@@ -1,6 +1,5 @@
 """Upload the checked release using an explicitly entered, in-memory token."""
 import getpass
-from pathlib import Path
 
 from twine.commands.check import check
 from twine.commands.upload import upload
@@ -8,17 +7,12 @@ from twine.settings import Settings
 
 from check_distribution import main as check_contents
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
 def main():
-    check_contents()
-    artifacts = [str(path) for path in sorted((ROOT / "dist").glob("candleprep-*.whl"))]
-    artifacts += [str(path) for path in sorted((ROOT / "dist").glob("candleprep-*.tar.gz"))]
+    artifacts = [str(path) for path in check_contents()]
     if check(artifacts, strict=True):
         raise SystemExit("Distribution validation failed; nothing was uploaded.")
     print("Uploading to production PyPI using the token entered below.")
-    print("First upload: use an Entire account (all projects) token.")
+    print("Use a production token authorized for the candleprep project.")
     token = getpass.getpass("PyPI API token (hidden): ").strip()
     if not token:
         raise SystemExit("No token entered; nothing was uploaded.")

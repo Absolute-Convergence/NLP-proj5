@@ -1,10 +1,9 @@
 import json
 import tempfile
 import unittest
-from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
-from notebook_helpers import load_tag
+from candleprep import evaluation
 from candleprep.schema import RecoveryError
 from test_corruption import window
 
@@ -12,7 +11,7 @@ from test_corruption import window
 class EvaluationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.namespace = load_tag("scoring", {"json": json, "Counter": Counter})
+        cls.namespace = vars(evaluation)
 
     def score(self, prediction, target=None):
         if target is None:
@@ -63,14 +62,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(metrics["confusion_matrix"]["true"]["invalid"], 1)
 
     def test_final_demo_measures_false_omissions_and_failures(self):
-        namespace = dict(self.namespace)
-        namespace.update({"RUN_FINAL_DEMO": False})
-        def save_json(path, value):
-            Path(path).write_text(json.dumps(value), encoding="utf-8")
-        def save_records(path, value):
-            Path(path).write_text("\n".join(json.dumps(item) for item in value), encoding="utf-8")
-        namespace.update({"save_json": save_json, "save_records": save_records})
-        namespace = load_tag("final_demo", namespace)
+        namespace = self.namespace
         records = []
         references = []
         predictions = []
