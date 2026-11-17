@@ -1,0 +1,17 @@
+include LICENSE
+include pyproject.toml
+include MANIFEST.in
+include candleprep/README.md
+recursive-include candleprep *.py
+exclude README.md
+exclude PUBLISHING.md
+prune tests
+prune tools
+prune tmp
+prune .venv
+prune .vscode
+prune generated_data
+prune candle_results
+prune mistral_med_results
+prune saved_mistral_med_adapter
+global-exclude *.ipynb *.csv *.pdf *.py[cod] *.safetensors *.pt *.pth *.bin *.gguf

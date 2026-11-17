@@ -1,10 +1,12 @@
 import argparse
 import json
+from . import __version__
 from .datasets import generate_dataset
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate verified CPU candle corruption datasets")
+    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
     parser.add_argument("source", help="Original candle CSV (never modified)")
     parser.add_argument("--output", default="generated_data")
     parser.add_argument("--train", type=int, default=10000)

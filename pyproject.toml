@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "candleprep"
+dynamic = ["version"]
+description = "Synthetic candle-data corruption and verified repair-instruction datasets"
+readme = {file = "candleprep/README.md", content-type = "text/markdown"}
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Absolute-Convergence"}]
+dependencies = []
+keywords = ["data-cleaning", "synthetic-data", "candles", "nlp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Repository = "https://github.com/Absolute-Convergence/NLP-proj5-dataset"
+Documentation = "https://github.com/Absolute-Convergence/NLP-proj5-dataset/blob/main/candleprep/README.md"
+Issues = "https://github.com/Absolute-Convergence/NLP-proj5-dataset/issues"
+
+[project.scripts]
+candleprep = "candleprep.__main__:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["candleprep", "candleprep.*"]
+namespaces = false
+
+[tool.setuptools.dynamic]
+version = {attr = "candleprep.__version__"}

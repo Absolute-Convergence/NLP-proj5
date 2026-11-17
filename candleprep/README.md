@@ -2,7 +2,30 @@
 
 CPU-only synthetic candle corruption and verified repair-instruction datasets.
 The core uses Python's standard library and imports without Torch, a GPU, or a
-model. Keep this folder next to `proj5.ipynb` for a normal local import.
+model. Requires Python 3.11 or newer; licensed under MIT.
+
+## Installation
+
+Install the published package:
+
+```bash
+python -m pip install candleprep==0.1.0
+candleprep --version
+```
+
+You can also install a downloaded wheel without PyPI:
+
+```bash
+python -m pip install candleprep-0.1.0-py3-none-any.whl
+```
+
+For a source checkout, run `python -m pip install .`, or keep the `candleprep`
+folder next to the notebook. The installed package includes the library and CLI;
+it does not include the source CSV, notebook, generated datasets, or ML packages.
+Obtain the source CSV and notebook from the
+[project repository](https://github.com/Absolute-Convergence/NLP-proj5-dataset).
+
+## Usage
 
 ```python
 from candleprep.datasets import generate_dataset
@@ -14,8 +37,10 @@ Equivalent command, using the intended Python 3.11.9 interpreter:
 
 ```powershell
 python -m candleprep "TVC_GOLD, 360.csv" --output generated_data/v1
-python -m unittest discover -s tests -v
 ```
+
+An installed package also provides `candleprep "TVC_GOLD, 360.csv" --output generated_data/v1`.
+The repository's tests run with `python -m unittest discover -s tests -v`.
 
 For a preview, add `--train 120 --validation 80 --test 100` and select another
 output directory. Existing dataset files are never overwritten. CPU generation

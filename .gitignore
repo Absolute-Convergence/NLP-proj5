@@ -4,6 +4,7 @@
 
 # Local Python/editor environments and caches.
 /.venv/
+/.packaging-venv/
 /venv/
 /.vscode/
 __pycache__/

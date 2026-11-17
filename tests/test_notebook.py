@@ -45,6 +45,54 @@ class NotebookTests(unittest.TestCase):
             self.assertTrue(all(int(value) == -100 for value in collated["labels"][row, len(feature["input_ids"]):]))
         print("Longest training sequence including full JSON:", longest)
 
+    def test_sft_labels_correspond_to_verified_reconstruction(self):
+        import pandas as pd
+        records = load_jsonl(NOTEBOOK.parent / "generated_data/v1/train.jsonl")
+        references = load_jsonl(NOTEBOOK.parent / "generated_data/v1/train.references.jsonl")
+        namespace = load_tag("sft_construction", {
+            "json": json, "pd": pd, "data": {"train": records},
+            "metadata": {"train": references}, "display": lambda value: None})
+        dataset = namespace["sft_dataset"]
+        self.assertEqual(len(dataset), 10000)
+        self.assertEqual(set(dataset.column_names), {"id", "input", "target"})
+        preview = namespace["verified_preview"]
+        self.assertEqual(len(preview), 5)
+        targets = [json.loads(value) for value in preview["sft_json_label"]]
+        self.assertEqual(sum(target["recoverable"] for target in targets), 3)
+        self.assertTrue(all(value is True for value in preview.iloc[:3]["matches_original"]))
+        self.assertTrue(all("OMIT complete window" in value for value in preview.iloc[3:]["deterministic_reconstruction"]))
+
+    def test_fixed_demo_examples_never_use_targets_as_model_input(self):
+        records = load_jsonl(NOTEBOOK.parent / "generated_data/v1/validation.jsonl")
+        references = load_jsonl(NOTEBOOK.parent / "generated_data/v1/validation.references.jsonl")
+        namespace = load_tag("scoring", {"json": json, "Counter": Counter})
+        load_tag("tokenization", namespace)
+        namespace.update({"data": {"validation": records}, "metadata": {"validation": references}})
+        load_tag("demo_helpers", namespace)
+        chosen = namespace["demo_records"]
+        self.assertEqual(len({record["id"] for record in chosen}), 3)
+        self.assertEqual({record["target"]["recoverable"] for record in chosen}, {True, False})
+        inspection = namespace["choose_inspection_records"](records, chosen)
+        self.assertEqual(inspection[:3], chosen)
+        self.assertEqual(len({record["id"] for record in inspection}), 5)
+        self.assertIn("normalize_numeric_format", inspection[3]["target"]["operations"])
+        self.assertIn("deduplicate_records", inspection[4]["target"]["operations"])
+        for record in chosen:
+            changed = {**record, "id": "different-id", "target": {"recoverable": "SENTINEL", "operations": ["SENTINEL"]}}
+            self.assertEqual(namespace["user_text"](record), namespace["user_text"](changed))
+        with self.assertRaises(ValueError):
+            namespace["show_model_examples"](chosen, ["only one prediction"])
+
+        import pandas as pd
+        displayed = []
+        namespace.update({"pd": pd, "display": displayed.append, "render_prompt": lambda r: r["input"]})
+        before = [{"id": record["id"], "prediction": "baseline " + record["id"]} for record in chosen]
+        namespace["show_model_examples"](inspection, [json.dumps(r["target"]) for r in inspection], before)
+        frame = displayed[0].data
+        self.assertEqual(len(frame), 5)
+        self.assertEqual(frame.iloc[0]["before_sft_output"], before[0]["prediction"])
+        self.assertIn("additional after-SFT", frame.iloc[4]["before_sft_output"])
+
 
 if __name__ == "__main__":
     unittest.main()
