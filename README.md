@@ -12,13 +12,22 @@ omitting the entire window. They remain in supervised training.
 
 ## Run the notebook
 
-Open `proj5.ipynb` in a CUDA-enabled Python environment with the existing
-PyTorch/Transformers/PEFT/bitsandbytes/Accelerate training dependencies. The
+Open `proj5.ipynb` in a CUDA-enabled PyTorch environment with Transformers. The
 verified environment used Python 3.11.9, PyTorch 2.10.0+cu128, Transformers 5.8.1,
 PEFT 0.21.3, and bitsandbytes 0.50.2. Preserve a working CUDA installation.
 
-The notebook starts by installing the published `candleprep[notebook]==0.2.0`,
-then uses just:
+The notebook starts by installing the published `candleprep[notebook]==0.2.0`
+plus PEFT 0.21.3, Accelerate 1.15.0, and bitsandbytes 0.50.2. Restart the kernel
+once after that first installation, then run from the top. These separate
+training dependencies are not supplied by candleprep's CPU/display extra.
+
+To repair an existing TAMU notebook session, run:
+
+```python
+%pip install "peft==0.21.3" "accelerate==1.15.0" "bitsandbytes==0.50.2"
+```
+
+Restart the kernel afterward. The preparation cells then use just:
 
 ```python
 from candleprep import CandleDataset
