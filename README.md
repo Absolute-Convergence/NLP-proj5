@@ -45,7 +45,7 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 13 code cells / 256 code lines (including a separate cleanup
+The notebook has 13 code cells / 264 code lines (including a separate cleanup
 definition cell): package installation; preparation;
 data/label previews; model settings and cleanup; tokenization/model helpers; five
 base-model examples; visible starter-style LoRA training; primary training;
@@ -62,6 +62,10 @@ Completed adapters are reused and interrupted training resumes from the latest
 checkpoint. New simplified runs use `candle_results/simple_sft_v2/`; earlier
 `full_sft_v1/` adapters/results remain untouched. Settings changes require a new
 RESULTS directory.
+
+Configuration settings use one variable per line. `LORA_RANK` chooses the primary
+adapter; `RANKS` lists the separate ranks for the assignment's required comparison.
+The handout requires exploring rank values, but does not prescribe 8/16/32.
 
 Five validation cases are fixed before generation and reused afterward. Rank
 8/16/32 validation studies and base/adapter full-test inference remain separate
