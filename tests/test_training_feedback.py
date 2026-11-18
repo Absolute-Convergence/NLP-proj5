@@ -48,19 +48,19 @@ class TrainingFeedbackTests(unittest.TestCase):
         import matplotlib.pyplot as plt
         import pandas as pd
         from candleprep.evaluation import score_predictions
-        records=[{'id':str(i),'target':{'recoverable':False,'operations':[]}} for i in range(5)]
-        for with_validation in (True,False):
-            with self.subTest(with_validation=with_validation),tempfile.TemporaryDirectory() as temporary:
+        for with_validation,count in ((True,3),(False,7)):
+            records=[{'id':str(i),'target':{'recoverable':False,'operations':[]}} for i in range(count)]
+            with self.subTest(with_validation=with_validation,count=count),tempfile.TemporaryDirectory() as temporary:
                 destination=Path(temporary);rank=destination/'rank_16';rank.mkdir()
                 history=[{'step':1,'loss':1.2},{'step':100,'loss':0.5}]
                 if with_validation:
                     history.append({'step':100,'eval_loss':0.6,'eval_target_token_accuracy':0.75})
                 (rank/'trainer_state.json').write_text(json.dumps({'log_history':history}))
-                (destination/'before_metrics.json').write_text(json.dumps(score_predictions(['bad']*5,records)))
-                (rank/'after_metrics.json').write_text(json.dumps(score_predictions(
-                    ['{"recoverable":false,"operations":[]}']*5,records)))
+                (destination/f'before_{count}_metrics.json').write_text(json.dumps(score_predictions(['bad']*count,records)))
+                (rank/f'after_{count}_metrics.json').write_text(json.dumps(score_predictions(
+                    ['{"recoverable":false,"operations":[]}']*count,records)))
                 figures=[]
-                namespace={'RESULTS':destination,'LORA_RANK':16,'pd':pd,'plt':plt,'json':json,
+                namespace={'RESULTS':destination,'LORA_RANK':16,'DEMO_EXAMPLES':count,'pd':pd,'plt':plt,'json':json,
                     'display':Mock(),'load_base':Mock(),'predict':Mock(),'train_adapter':Mock()}
                 with patch.object(plt,'show',side_effect=lambda:figures.append(plt.gcf())):
                     load_tag('results_display',namespace)
@@ -68,6 +68,8 @@ class TrainingFeedbackTests(unittest.TestCase):
                 self.assertEqual(len(figures[0].axes[0].lines),2 if with_validation else 1)
                 self.assertEqual(len(figures[0].axes[1].lines),1 if with_validation else 0)
                 self.assertEqual(namespace['display'].call_args.args[0].shape,(4,2))
+                self.assertIn(f'({count} cases)',namespace['display'].call_args.args[0].columns[0])
+                self.assertEqual(figures[1].axes[0].get_title(),f'{count}-case generated-answer comparison')
                 namespace['load_base'].assert_not_called()
                 namespace['predict'].assert_not_called()
                 namespace['train_adapter'].assert_not_called()

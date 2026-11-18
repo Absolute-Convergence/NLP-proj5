@@ -45,10 +45,10 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 12 code cells / about 300 code lines: package installation;
+The notebook has 12 code cells / about 315 code lines: package installation;
 preparation and data/label previews; settings and cleanup; tokenization/model
-helpers; five base-model examples; visible starter-style LoRA training; primary
-training; the same five examples afterward; immediate saved-history charts; and
+helpers; configurable base-model examples; visible starter-style LoRA training;
+primary training; the same examples afterward; immediate saved-history charts; and
 an optional small generated-answer comparison.
 
 Setup disables MathJax for styled data tables so dollar signs in task text and
@@ -56,17 +56,36 @@ synthetic currency values display literally. For an already open notebook, run
 `import pandas as pd; pd.set_option("styler.html.mathjax", False)` and rerun the
 display cell. Cached baseline responses are reused; no retraining is required.
 
-The SFT dataset contains 10,000 corrupted-input/verified-JSON-label pairs.
+The prepared training split contains 10,000 corrupted-input/verified-JSON-label pairs.
 Deterministic reconstruction proves positive labels offline. Originals/history
 never enter model prompts. Target-only loss masking preserves full answers.
 Trainer consumes cached labels without generating responses during training.
 
-Rank-16 primary training uses batch size 1, accumulation 16, one epoch / 625
-optimizer steps, gradient checkpointing, and checkpoints every 100 steps.
+Section 4 controls how much training and demo generation to run:
+
+```python
+TRAINING_EXAMPLES = 1000  # None uses the entire training split
+DEMO_EXAMPLES = 5        # Matched before/after displays
+COMPARISON_EXAMPLES = 0  # Optional extra held-out cases per model
+```
+
+Training uses a random sample without replacement, selected reproducibly by
+`SEED`. Sampling preserves each complete corrupted CSV window and its verified
+JSON label; it never samples individual candle rows within a window or draws
+from validation/test. Only selected pairs are tokenized for training. The
+prepared dataset remains complete. The default 1,000 pairs use about one tenth
+the training work of 10,000; download/loading/validation time is additional.
+Use a positive count up to 10,000, or `None` for all pairs.
+
+Rank-16 primary training uses batch size 1, accumulation 16, one epoch,
+gradient checkpointing, and checkpoints every 100 steps.
 Completed adapters are reused and interrupted training resumes from the latest
-checkpoint. New simplified runs use `candle_results/simple_sft_v2/`; earlier
-`full_sft_v1/` adapters/results remain untouched. Settings changes require a new
-RESULTS directory.
+checkpoint. Sampled runs use `candle_results/sampled_sft_v1/`; earlier result
+directories remain untouched. Training settings, including the selected record
+IDs, are saved to prevent reusing an adapter/checkpoint for a different sample.
+Changing the training count or seed requires a new `RESULTS` directory.
+After changing training settings, rerun Sections 4–9, including Section 5's
+tokenization. Training rejects a stale tokenized sample left in the kernel.
 
 Configuration settings use one variable per line. `LORA_RANK` chooses the
 single adapter trained by this run. There is no automatic rank sweep. For the
@@ -75,31 +94,38 @@ are saved separately. Use a new `RESULTS` directory for changed training
 hyperparameters such as learning rate or epoch count, and document observations.
 The handout requires rank exploration but does not prescribe 8/16/32 or a sweep.
 
-Five validation cases are fixed before generation and reused afterward. Their
-before/after metrics are saved, with trained results stored per rank. Section 10
+`DEMO_EXAMPLES` validation cases are fixed before generation and reused afterward
+(default 5; range 1–1,000). With at least three cases, the selection includes
+positive repairs and an unrecoverable window. Their before/after metrics are
+saved by count, with trained results stored per rank. Section 10
 reads saved Trainer history and metric files to plot training/validation loss,
-teacher-forced target-token accuracy, and the five-case generated-answer results.
+teacher-forced target-token accuracy, and the configured demo's generated-answer results.
 No model, inference job, or optional comparison is needed to draw those charts.
+To change only the demo count, rerun Section 4, then Sections 6, 9, and 10; no
+retraining is needed. Section 6 generates/reuses the matching baseline count,
+Section 9 loads the saved adapter, and chart labels follow the selected count.
 
 New runs use `VALIDATION_EXAMPLES=64` fixed validation cases, every
-`VALIDATION_EVERY=100` optimizer steps and at training completion. Trainer makes
+`VALIDATION_EVERY=25` optimizer steps and at training completion. Trainer makes
 teacher-forced forward passes against cached labels; it does not generate answers
 or update weights during validation. Only argmax token IDs are retained for
 metrics, with evaluation batch size 1. Target-token accuracy excludes prompt and
 padding tokens and accounts for the causal next-token shift. It is a different
 metric from complete generated-JSON correctness.
 
-Older completed adapters are reused. Their training curves remain displayable;
-if they did not record validation loss/accuracy, those missing metrics are marked
-as unavailable. The notebook does not fabricate a validation trajectory or rerun
+Completed adapters with matching training settings are reused. Older training
+curves remain displayable; if they did not record validation loss/accuracy,
+those missing metrics are marked as unavailable. The notebook does not fabricate a validation trajectory or rerun
 training to create one. Rerunning Section 6 reuses frozen responses and writes
-its small baseline metric file; Section 9 saves the five trained-case metrics.
+its small baseline metric file; Section 9 saves the configured trained-case metrics.
 
 Section 11 is optional: `COMPARISON_EXAMPLES=0` skips extra generation; set it to
 25 for 25 deterministic held-out cases per model. The original base and trained
 adapter receive the same sample. Results record case IDs, count, predictions,
-and metrics under the selected rank. This does not claim evaluation of all
-2,000 test examples. The prior full-dataset generation and dependent final-tool
+and metrics under the selected rank. This is separate from training size and
+`DEMO_EXAMPLES`: 25 means 25 base responses plus 25 trained responses. It does
+not claim evaluation of all 2,000 test examples. The prior full-dataset
+generation and dependent final-tool
 execution gate have been removed from the notebook; candleprep's explicit
 repair-execution API remains available separately.
 

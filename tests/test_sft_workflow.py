@@ -1,4 +1,4 @@
-"""The short notebook trains cached labels and compares five fixed examples."""
+"""The short notebook trains cached labels and compares configurable demos."""
 import json
 import math
 import random
@@ -20,25 +20,34 @@ def save_json(path,value):
     Path(path).write_text(json.dumps(value),encoding='utf-8')
 
 
-def demo_namespace(destination):
-    return {'json':json,'RESULTS':destination,'dataset':SimpleNamespace(
-        examples=lambda count: records(),display_predictions=Mock()),
-        'load_base':Mock(), 'predict':Mock(return_value=['after']*5),
+def demo_namespace(destination, count=5):
+    return {'json':json,'RESULTS':destination,'DEMO_EXAMPLES':count,'dataset':SimpleNamespace(
+        examples=lambda count: records(count),display_predictions=Mock()),
+        'load_base':Mock(), 'predict':Mock(side_effect=lambda model, rows, label:['after']*len(rows)),
         'save_json':save_json,'user_text':lambda r:r['input'],'release_gpu':Mock(),
         'score_predictions':Mock(return_value={}),
         'evaluate':Mock(side_effect=AssertionError('Full inference must be separate'))}
 
 
 class SFTWorkflowTests(unittest.TestCase):
-    def test_baseline_only_generates_five_then_reuses_frozen_predictions(self):
+    def test_baseline_count_can_change_without_training_and_reuses_each_frozen_sample(self):
         with tempfile.TemporaryDirectory() as temporary:
             namespace=demo_namespace(Path(temporary))
+            namespace['train_adapter']=Mock(side_effect=AssertionError('Changing demos must not retrain'))
             load_tag('baseline_run',namespace)
             self.assertEqual(len(namespace['predict'].call_args.args[1]),5)
             load_tag('baseline_run',namespace)
             namespace['predict'].assert_called_once()
             namespace['load_base'].assert_called_once()
+            namespace['DEMO_EXAMPLES']=8
+            load_tag('baseline_run',namespace)
+            self.assertEqual(len(namespace['predict'].call_args.args[1]),8)
+            self.assertEqual(len(json.loads((Path(temporary)/'before_8.json').read_text())['predictions']),8)
+            namespace['DEMO_EXAMPLES']=5
+            load_tag('baseline_run',namespace)
+            self.assertEqual(namespace['predict'].call_count,2)
             namespace['evaluate'].assert_not_called()
+            namespace['train_adapter'].assert_not_called()
 
     def test_primary_sft_executes_once_without_response_generation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -49,18 +58,23 @@ class SFTWorkflowTests(unittest.TestCase):
             namespace['train_adapter'].assert_called_once_with(16)
             namespace['predict'].assert_not_called()
 
-    def test_after_sft_compares_the_same_five_ids_prompts_and_outputs(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            destination=Path(temporary)
-            save_json(destination/'before.json',{'ids':[r['id'] for r in records()],
-                'prompts':[r['input'] for r in records()],'predictions':['base']*5})
-            namespace=demo_namespace(destination)
-            (destination/'rank_16').mkdir()
-            namespace.update({'LORA_RANK':16,'PeftModel':SimpleNamespace(from_pretrained=Mock())})
-            load_tag('after_run',namespace)
-            self.assertEqual([r['id'] for r in namespace['predict'].call_args.args[1]],[str(i) for i in range(5)])
-            self.assertEqual(namespace['dataset'].display_predictions.call_args.args[2],['base']*5)
-            namespace['evaluate'].assert_not_called()
+    def test_after_sft_compares_the_requested_same_ids_prompts_and_outputs(self):
+        for count in (1,5,8):
+            with self.subTest(count=count),tempfile.TemporaryDirectory() as temporary:
+                destination=Path(temporary)
+                save_json(destination/f'before_{count}.json',{'ids':[r['id'] for r in records(count)],
+                    'prompts':[r['input'] for r in records(count)],'predictions':['base']*count})
+                namespace=demo_namespace(destination,count)
+                (destination/'rank_16').mkdir()
+                namespace.update({'LORA_RANK':16,'PeftModel':SimpleNamespace(from_pretrained=Mock())})
+                load_tag('after_run',namespace)
+                self.assertEqual([r['id'] for r in namespace['predict'].call_args.args[1]],[str(i) for i in range(count)])
+                self.assertEqual(namespace['dataset'].display_predictions.call_args.args[2],['base']*count)
+                saved=json.loads((destination/f'rank_16/after_{count}.json').read_text())
+                self.assertEqual(saved['ids'],[str(i) for i in range(count)])
+                self.assertEqual(len(saved['predictions']),count)
+                self.assertTrue((destination/f'rank_16/after_{count}_metrics.json').exists())
+                namespace['evaluate'].assert_not_called()
 
     def test_disabled_extra_jobs_do_not_load_models_or_train(self):
         namespace={'COMPARISON_EXAMPLES':0,'load_base':Mock(),'train_adapter':Mock()}
@@ -89,7 +103,7 @@ class SFTWorkflowTests(unittest.TestCase):
             self.assertEqual(saved['base']['ids'],saved['selected']['ids'])
             self.assertEqual(saved['selected']['metrics']['examples'],3)
 
-    def test_real_training_function_uses_all_cached_pairs_saves_and_reuses_adapter(self):
+    def test_real_training_function_uses_selected_pairs_saves_and_reuses_adapter(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination=Path(temporary)
             model=Mock();model.generate.side_effect=AssertionError('Training is not generation')
@@ -97,17 +111,19 @@ class SFTWorkflowTests(unittest.TestCase):
                 path.mkdir(parents=True,exist_ok=True)
                 (path/'adapter_model.safetensors').write_bytes(b'test weights')
             model.save_pretrained.side_effect=save_adapter
-            trainer=Mock(model=model,state=SimpleNamespace(global_step=625,epoch=1,save_to_json=Mock()))
+            trainer=Mock(model=model,state=SimpleNamespace(global_step=63,epoch=1,save_to_json=Mock()))
             trainer.train.return_value=SimpleNamespace(training_loss=0.028)
             trainer.evaluate.return_value={'eval_loss':0.05,'eval_target_token_accuracy':0.9}
             cuda=SimpleNamespace(is_bf16_supported=lambda:True,reset_peak_memory_stats=Mock(),
                 max_memory_allocated=lambda:5*1024**3,max_memory_reserved=lambda:6*1024**3)
-            namespace={'RESULTS':destination,'settings':{},'json':json,'math':math,'time':time,
+            training_ids=[f'train-{i}' for i in range(1000)]
+            namespace={'RESULTS':destination,'settings':{'training_ids':training_ids},
+                'tokenized_training_ids':training_ids,'json':json,'math':math,'time':time,
                 'BATCH_SIZE':1,'ACCUMULATION':16,'EPOCHS':1,'LEARNING_RATE':2e-4,'SEED':4820,
                 'save_json':save_json,'get_last_checkpoint':lambda path:None,'load_base':Mock(return_value=model),
                 'prepare_model_for_kbit_training':lambda m:m,'get_peft_model':lambda m,c:m,
                 'LoraConfig':Mock(),'TrainingArguments':Mock(),'Trainer':Mock(return_value=trainer),
-                'DataCollatorForSeq2Seq':Mock(),'tokenizer':Mock(),'train_dataset':range(10000),
+                'DataCollatorForSeq2Seq':Mock(),'tokenizer':Mock(),'train_dataset':range(1000),
                 'torch':SimpleNamespace(cuda=cuda),'release_gpu':Mock(),'VALIDATION_EVERY':100,
                 'validation_dataset':range(64),'validation_metrics':Mock(),'validation_token_ids':Mock()}
             load_definitions('training_helpers',namespace)
@@ -116,7 +132,7 @@ class SFTWorkflowTests(unittest.TestCase):
             namespace['load_base'].assert_called_once()
             trainer.train.assert_called_once_with(resume_from_checkpoint=None)
             trainer.evaluate.assert_called_once_with()
-            self.assertEqual(len(namespace['Trainer'].call_args.kwargs['train_dataset']),10000)
+            self.assertIs(namespace['Trainer'].call_args.kwargs['train_dataset'],namespace['train_dataset'])
             args=namespace['TrainingArguments'].call_args.kwargs
             self.assertTrue(args['gradient_checkpointing'])
             self.assertFalse(args['disable_tqdm'])
@@ -125,10 +141,16 @@ class SFTWorkflowTests(unittest.TestCase):
             self.assertEqual(args['per_device_eval_batch_size'],1)
             self.assertEqual(len(namespace['Trainer'].call_args.kwargs['eval_dataset']),64)
             report=json.loads((adapter.parent/'training.json').read_text())
-            self.assertEqual(report['steps'],625)
+            self.assertEqual(report['steps'],63)
+            self.assertEqual(report['examples'],1000)
             self.assertEqual(report['peak_reserved_gib'],6)
             self.assertEqual(report['validation']['eval_target_token_accuracy'],0.9)
             model.generate.assert_not_called()
+            namespace['RESULTS']=destination/'changed-sample'
+            namespace['tokenized_training_ids']=['stale-training-id']
+            with self.assertRaisesRegex(ValueError,'rerun Section 5'):
+                namespace['train_adapter'](16)
+            namespace['load_base'].assert_called_once()
 
 
 if __name__ == '__main__':
