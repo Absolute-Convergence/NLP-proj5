@@ -68,12 +68,55 @@ class TrainingFeedbackTests(unittest.TestCase):
                 self.assertEqual(len(figures[0].axes[0].lines),2 if with_validation else 1)
                 self.assertEqual(len(figures[0].axes[1].lines),1 if with_validation else 0)
                 self.assertEqual(namespace['display'].call_args.args[0].shape,(4,2))
-                self.assertIn(f'({count} cases)',namespace['display'].call_args.args[0].columns[0])
+                table=namespace['display'].call_args.args[0]
+                self.assertEqual(table.loc['Correct JSON plan','Before SFT'],f'0/{count} (0%)')
+                self.assertEqual(table.loc['Correct JSON plan','After SFT (rank 16)'],f'{count}/{count} (100%)')
+                self.assertEqual(table.loc['Tool order (recoverable)','Before SFT'],'N/A')
                 self.assertEqual(figures[1].axes[0].get_title(),f'{count}-case generated-answer comparison')
+                labels=[t.get_text() for t in figures[1].axes[0].texts]
+                self.assertEqual(labels.count('0%'),3)
+                self.assertEqual(labels.count('100%'),3)
+                self.assertEqual(labels.count('N/A'),2)
+                self.assertEqual(len(figures[1].axes[0].collections),6)
                 namespace['load_base'].assert_not_called()
                 namespace['predict'].assert_not_called()
                 namespace['train_adapter'].assert_not_called()
                 plt.close('all')
+
+    def test_all_zero_base_metrics_are_visible_alongside_trained_scores(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        from candleprep.evaluation import score_predictions
+        records=[{'target':{'recoverable':True,'operations':['parse_number_words']}},
+                 {'target':{'recoverable':False,'operations':[]}}]
+        namespace={'pd':pd,'plt':plt,'display':Mock()}
+        load_definitions('comparison_display',namespace)
+        with patch.object(plt,'show'):
+            namespace['show_comparison']({'Before SFT':score_predictions(['bad']*2,records),
+                'After SFT':score_predictions([json.dumps(r['target']) for r in records],records)},'Two cases')
+        ax=plt.gca()
+        self.assertEqual([t.get_text() for t in ax.texts].count('0%'),4)
+        self.assertEqual([t.get_text() for t in ax.texts].count('100%'),4)
+        self.assertEqual(len(ax.collections),8)
+        self.assertTrue(all(float(c.get_offsets()[0,1])==0 for c in ax.collections[:4]))
+        table=namespace['display'].call_args.args[0]
+        self.assertEqual(table.loc['Tool order (recoverable)','Before SFT'],'0/1 (0%)')
+        self.assertEqual(table.loc['Correct JSON plan','Before SFT'],'0/2 (0%)')
+        plt.close('all')
+
+    def test_missing_baseline_metrics_are_reported_instead_of_displayed_as_zero(self):
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        with tempfile.TemporaryDirectory() as temporary:
+            namespace={'RESULTS':Path(temporary),'LORA_RANK':16,'DEMO_EXAMPLES':5,
+                       'pd':pd,'plt':plt,'json':json,'display':Mock()}
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                load_tag('results_display',namespace)
+            self.assertIn('Before-SFT metrics are missing',output.getvalue())
+            namespace['display'].assert_not_called()
 
 
 if __name__=='__main__':

@@ -87,8 +87,9 @@ class SFTWorkflowTests(unittest.TestCase):
         from candleprep.evaluation import score_predictions
         with tempfile.TemporaryDirectory() as temporary:
             destination=Path(temporary);(destination/'rank_16').mkdir()
-            namespace={'COMPARISON_EXAMPLES':3,'RESULTS':destination,'SEED':4820,'LORA_RANK':16,
-                'random':random,'pd':pd,'display':Mock(),'dataset':SimpleNamespace(records=Mock(return_value=records(100))),
+            namespace={'COMPARISON_EXAMPLES':3,'DEMO_EXAMPLES':2,'RESULTS':destination,'SEED':4820,'LORA_RANK':16,
+                'random':random,'pd':pd,'display':Mock(),'json':json,'show_comparison':Mock(),
+                'dataset':SimpleNamespace(records=Mock(return_value=records(100)),display_predictions=Mock()),
                 'load_base':Mock(),'PeftModel':SimpleNamespace(from_pretrained=Mock()),'release_gpu':Mock(),
                 'predict':Mock(return_value=['{"recoverable":false,"operations":[]}']*3),
                 'score_predictions':score_predictions,'save_json':save_json,'train_adapter':Mock()}
@@ -102,6 +103,22 @@ class SFTWorkflowTests(unittest.TestCase):
             saved=json.loads((destination/'rank_16/sample_3.json').read_text())
             self.assertEqual(saved['base']['ids'],saved['selected']['ids'])
             self.assertEqual(saved['selected']['metrics']['examples'],3)
+            shown=namespace['dataset'].display_predictions.call_args.args
+            self.assertEqual(len(shown[0]),2)
+            self.assertEqual(shown[0],calls[0].args[1][:2])
+            self.assertEqual(shown[1],saved['selected']['predictions'][:2])
+            self.assertEqual(shown[2],saved['base']['predictions'][:2])
+            namespace['show_comparison'].assert_called_once()
+            namespace['DEMO_EXAMPLES']=5
+            load_tag('sample_comparison',namespace)
+            self.assertEqual(namespace['predict'].call_count,2,'Cached comparison must not generate again')
+            self.assertEqual(namespace['load_base'].call_count,2)
+            self.assertEqual(len(namespace['dataset'].display_predictions.call_args.args[0]),3)
+            self.assertEqual(namespace['show_comparison'].call_count,2)
+            saved['base']['ids']=list(reversed(saved['base']['ids']))
+            save_json(destination/'rank_16/sample_3.json',saved)
+            with self.assertRaisesRegex(AssertionError,'Saved sample differs'):
+                load_tag('sample_comparison',namespace)
 
     def test_real_training_function_uses_selected_pairs_saves_and_reuses_adapter(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -45,7 +45,7 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 12 code cells / about 315 code lines: package installation;
+The notebook has 12 code cells / about 355 code lines: package installation;
 preparation and data/label previews; settings and cleanup; tokenization/model
 helpers; configurable base-model examples; visible starter-style LoRA training;
 primary training; the same examples afterward; immediate saved-history charts; and
@@ -101,6 +101,9 @@ saved by count, with trained results stored per rank. Section 10
 reads saved Trainer history and metric files to plot training/validation loss,
 teacher-forced target-token accuracy, and the configured demo's generated-answer results.
 No model, inference job, or optional comparison is needed to draw those charts.
+The comparison table shows correct/total counts and percentages. Charts group
+the two models by metric, with numeric labels and markers even at 0%. Missing
+files are reported; tool-order accuracy is N/A if there are no recoverable cases.
 To change only the demo count, rerun Section 4, then Sections 6, 9, and 10; no
 retraining is needed. Section 6 generates/reuses the matching baseline count,
 Section 9 loads the saved adapter, and chart labels follow the selected count.
@@ -123,8 +126,11 @@ Section 11 is optional: `COMPARISON_EXAMPLES=0` skips extra generation; set it t
 25 for 25 deterministic held-out cases per model. The original base and trained
 adapter receive the same sample. Results record case IDs, count, predictions,
 and metrics under the selected rank. This is separate from training size and
-`DEMO_EXAMPLES`: 25 means 25 base responses plus 25 trained responses. It does
-not claim evaluation of all 2,000 test examples. The prior full-dataset
+`DEMO_EXAMPLES`: 25 means 25 base responses plus 25 trained responses. The section
+shows the same labeled score chart/table and up to `DEMO_EXAMPLES` paired inputs,
+expected JSON labels, and before/after model outputs. Rerunning reuses saved
+responses for the same rank/sample, so inspecting them does not regenerate them.
+This does not claim evaluation of all 2,000 test examples. The prior full-dataset
 generation and dependent final-tool
 execution gate have been removed from the notebook; candleprep's explicit
 repair-execution API remains available separately.
