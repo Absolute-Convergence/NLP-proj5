@@ -73,13 +73,15 @@ class TrainingFeedbackTests(unittest.TestCase):
                 self.assertEqual(table.loc['Strict tool call','Before SFT'],f'0/{count}')
                 self.assertEqual(table.loc['Strict tool call','After SFT (rank 16)'],f'{count}/{count}')
                 self.assertEqual(table.loc['Tool-order content','Before SFT'],'N/A (no recoverable cases)')
-                self.assertEqual(table.loc['Recoverability content','Before SFT'],f'0 correct; 0 wrong; {count} unscorable')
+                self.assertEqual(table.loc['Recoverability content','Before SFT'],f'0/{count} (0%); {count} wrong')
                 self.assertEqual(figures[1]._suptitle.get_text(),f'{count}-case before/after comparison')
                 self.assertEqual(len(figures[1].axes),4)
                 labels=[t.get_text() for t in figures[1].axes[0].texts]
                 self.assertEqual(labels.count('0%'),2)
                 self.assertEqual(labels.count('100%'),2)
+                self.assertEqual(len(figures[1].axes[1].containers),2)
                 self.assertEqual(figures[1].axes[1].containers[-1][0].get_width(),count)
+                self.assertEqual([t.get_text() for t in figures[1].legends[0].get_texts()],['correct','wrong'])
                 namespace['load_base'].assert_not_called()
                 namespace['predict'].assert_not_called()
                 namespace['train_adapter'].assert_not_called()
@@ -105,7 +107,7 @@ class TrainingFeedbackTests(unittest.TestCase):
         self.assertTrue(all(float(c.get_offsets()[0,1])==0 for c in ax.collections[:2]))
         table=namespace['display'].call_args.args[0]
         self.assertEqual(table.loc['Strict format','Before SFT'],'0/2')
-        self.assertEqual(table.loc['Full-plan content','Before SFT'],'2 correct; 0 wrong; 0 unscorable')
+        self.assertEqual(table.loc['Full-plan content','Before SFT'],'2/2 (100%); 0 wrong')
         self.assertEqual(table.loc['Complete JSON found','Before SFT'],'2/2')
         plt.close('all')
 

@@ -109,16 +109,19 @@ JSON, selects between multiple objects, or coerces field types. Unknown tool
 names are wrong content, and extra fields can fail strict format while preserving
 the intended plan content. The original strict scorer and saved metrics are unchanged.
 
-Content charts show correct, wrong, and unscorable counts over the same cases.
-Unreadable/incomplete or ambiguous responses stay visible instead of becoming
-automatic semantic errors or being silently excluded. Tool-order content uses
-only examples labeled recoverable; N/A means there are no such cases. A per-case
-diagnostic table explains which answers could be read. These are diagnostic
-content measurements, not proof of general reasoning ability.
+For this demo, unreadable, incomplete, ambiguous, or missing/malformed answer
+fields count as wrong in the applicable content metrics. Accuracy includes those
+failures in its denominator. Content charts show correct/wrong counts; the
+per-case table retains JSON reading status and invalid fields to explain errors.
+Tool-order content uses only examples labeled recoverable; N/A means there are
+no such cases. Complete JSON embedded in prose still receives content credit,
+while strict tool-call scoring continues to require the raw output contract.
 
-The uploaded TAMU run's five-case baseline has one correct recoverability answer,
-one wrong answer, and three unscorable unfinished JSON plans under this rule.
-Its strict format score remains 0/5. The unmodified executed upload is preserved
+The uploaded TAMU run's five-case baseline has one correct recoverability answer
+and four wrong answers (20%); three wrong answers contain unfinished JSON plans.
+The adapter has four correct and one wrong (80%). Baseline full-plan content is
+0/5 and adapter full-plan content is 4/5. Strict baseline format remains 0/5.
+The unmodified executed upload is preserved
 locally under ignored `tmp/tamu_run_before_scoring_fix.ipynb`. Existing responses
 can be rescored by updating and rerunning Section 10, then Section 11 for the
 same saved sample size. No training or new model generation is required.

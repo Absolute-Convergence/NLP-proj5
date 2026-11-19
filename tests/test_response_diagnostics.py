@@ -23,7 +23,7 @@ class ResponseDiagnosticsTests(unittest.TestCase):
                 self.assertEqual(row['Strict format'],text==answer)
                 self.assertEqual(row['Strict tool call'],text==answer)
 
-    def test_incomplete_and_ambiguous_json_are_unscorable_without_field_salvage(self):
+    def test_incomplete_and_ambiguous_json_are_wrong_without_field_salvage(self):
         texts=[None,'not JSON','{"recoverable":true,"operations":["parse_number_words"',
                '{"outer":'+json.dumps(self.target),json.dumps(self.target)+' '+json.dumps(self.target),
                '{"recoverable":false,"recoverable":true,"operations":[]}',
@@ -31,9 +31,10 @@ class ResponseDiagnosticsTests(unittest.TestCase):
         for text in texts:
             with self.subTest(text=text):
                 row=self.diagnose(text)
-                self.assertEqual(row['Recoverability content'],'unscorable')
-                self.assertEqual(row['Tool-order content'],'unscorable')
-                self.assertEqual(row['Full-plan content'],'unscorable')
+                self.assertEqual(row['Recoverability content'],'wrong')
+                self.assertEqual(row['Tool-order content'],'wrong')
+                self.assertEqual(row['Full-plan content'],'wrong')
+                self.assertEqual(row['Invalid fields'],'recoverable, operations')
                 self.assertFalse(row['Strict format'])
 
     def test_wrong_content_unknown_tools_and_extra_fields_are_not_conflated(self):
@@ -49,25 +50,28 @@ class ResponseDiagnosticsTests(unittest.TestCase):
     def test_readable_fields_are_scored_independently_without_type_coercion(self):
         row=self.diagnose('{"recoverable":true,"operations":"parse_number_words"}')
         self.assertEqual(row['Recoverability content'],'correct')
-        self.assertEqual(row['Tool-order content'],'unscorable')
-        self.assertEqual(row['Full-plan content'],'unscorable')
+        self.assertEqual(row['Tool-order content'],'wrong')
+        self.assertEqual(row['Full-plan content'],'wrong')
+        self.assertEqual(row['Invalid fields'],'operations')
         row=self.diagnose('{"recoverable":"true","operations":["parse_number_words"]}')
-        self.assertEqual(row['Recoverability content'],'unscorable')
+        self.assertEqual(row['Recoverability content'],'wrong')
         self.assertEqual(row['Tool-order content'],'correct')
-        self.assertEqual(row['Full-plan content'],'unscorable')
+        self.assertEqual(row['Full-plan content'],'wrong')
+        self.assertEqual(row['Invalid fields'],'recoverable')
         negative=self.diagnose('bad',{'recoverable':False,'operations':[]})
         self.assertEqual(negative['Tool-order content'],'not applicable')
 
-    def test_mixed_readability_keeps_unknown_cases_separate_from_wrong_answers(self):
+    def test_invalid_outputs_count_as_wrong_in_the_full_denominator(self):
         records=[{'id':str(i),'target':self.target if i!=2 else {'recoverable':False,'operations':[]}}
                  for i in range(5)]
         incomplete='Explanation ```json {"recoverable":true,"operations":["parse_'
         complete='Explanation ```json {"recoverable":true,"operations":[]} ```'
         rows=self.functions['diagnose_predictions']([incomplete,complete,complete,incomplete,incomplete],records)
         self.assertEqual([sum(r['Recoverability content']==state for r in rows)
-                          for state in ('correct','wrong','unscorable')],[1,1,3])
+                          for state in ('correct','wrong')],[1,4])
         self.assertEqual([sum(r['Full-plan content']==state for r in rows)
-                          for state in ('correct','wrong','unscorable')],[0,2,3])
+                          for state in ('correct','wrong')],[0,5])
+        self.assertEqual(sum(r['JSON reading']=='unreadable/incomplete' for r in rows),3)
         self.assertEqual(sum(r['Strict format'] for r in rows),0)
 
 
