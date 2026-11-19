@@ -109,6 +109,9 @@ class SFTWorkflowTests(unittest.TestCase):
             self.assertEqual(shown[1],saved['selected']['predictions'][:2])
             self.assertEqual(shown[2],saved['base']['predictions'][:2])
             namespace['show_comparison'].assert_called_once()
+            diagnostic_call=namespace['show_comparison'].call_args.args
+            self.assertEqual(diagnostic_call[0]['Before SFT'],saved['base']['predictions'])
+            self.assertEqual(diagnostic_call[1],calls[0].args[1])
             namespace['DEMO_EXAMPLES']=5
             load_tag('sample_comparison',namespace)
             self.assertEqual(namespace['predict'].call_count,2,'Cached comparison must not generate again')

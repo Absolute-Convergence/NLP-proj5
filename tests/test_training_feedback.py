@@ -42,12 +42,11 @@ class TrainingFeedbackTests(unittest.TestCase):
             self.assertTrue(0 <= metrics['eval_target_token_accuracy'] <= 1)
             generate.assert_not_called()
 
-    def test_charts_read_saved_history_with_no_inference_or_optional_results(self):
+    def test_charts_rescore_saved_responses_without_inference(self):
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         import pandas as pd
-        from candleprep.evaluation import score_predictions
         for with_validation,count in ((True,3),(False,7)):
             records=[{'id':str(i),'target':{'recoverable':False,'operations':[]}} for i in range(count)]
             with self.subTest(with_validation=with_validation,count=count),tempfile.TemporaryDirectory() as temporary:
@@ -56,57 +55,61 @@ class TrainingFeedbackTests(unittest.TestCase):
                 if with_validation:
                     history.append({'step':100,'eval_loss':0.6,'eval_target_token_accuracy':0.75})
                 (rank/'trainer_state.json').write_text(json.dumps({'log_history':history}))
-                (destination/f'before_{count}_metrics.json').write_text(json.dumps(score_predictions(['bad']*count,records)))
-                (rank/f'after_{count}_metrics.json').write_text(json.dumps(score_predictions(
-                    ['{"recoverable":false,"operations":[]}']*count,records)))
+                frozen={'ids':[r['id'] for r in records],'prompts':['identical prompt']*count,'predictions':['bad']*count}
+                (destination/f'before_{count}.json').write_text(json.dumps(frozen))
+                (rank/f'after_{count}.json').write_text(json.dumps({**frozen,
+                    'predictions':['{"recoverable":false,"operations":[]}']*count}))
                 figures=[]
                 namespace={'RESULTS':destination,'LORA_RANK':16,'DEMO_EXAMPLES':count,'pd':pd,'plt':plt,'json':json,
-                    'display':Mock(),'load_base':Mock(),'predict':Mock(),'train_adapter':Mock()}
+                    'display':Mock(),'load_base':Mock(),'predict':Mock(),'train_adapter':Mock(),
+                    'dataset':SimpleNamespace(records=lambda split:records)}
                 with patch.object(plt,'show',side_effect=lambda:figures.append(plt.gcf())):
                     load_tag('results_display',namespace)
                 self.assertEqual(len(figures),2)
                 self.assertEqual(len(figures[0].axes[0].lines),2 if with_validation else 1)
                 self.assertEqual(len(figures[0].axes[1].lines),1 if with_validation else 0)
-                self.assertEqual(namespace['display'].call_args.args[0].shape,(4,2))
-                table=namespace['display'].call_args.args[0]
-                self.assertEqual(table.loc['Correct JSON plan','Before SFT'],f'0/{count} (0%)')
-                self.assertEqual(table.loc['Correct JSON plan','After SFT (rank 16)'],f'{count}/{count} (100%)')
-                self.assertEqual(table.loc['Tool order (recoverable)','Before SFT'],'N/A')
-                self.assertEqual(figures[1].axes[0].get_title(),f'{count}-case generated-answer comparison')
+                table=namespace['display'].call_args_list[0].args[0]
+                self.assertEqual(table.shape,(6,2))
+                self.assertEqual(table.loc['Strict tool call','Before SFT'],f'0/{count}')
+                self.assertEqual(table.loc['Strict tool call','After SFT (rank 16)'],f'{count}/{count}')
+                self.assertEqual(table.loc['Tool-order content','Before SFT'],'N/A (no recoverable cases)')
+                self.assertEqual(table.loc['Recoverability content','Before SFT'],f'0 correct; 0 wrong; {count} unscorable')
+                self.assertEqual(figures[1]._suptitle.get_text(),f'{count}-case before/after comparison')
+                self.assertEqual(len(figures[1].axes),4)
                 labels=[t.get_text() for t in figures[1].axes[0].texts]
-                self.assertEqual(labels.count('0%'),3)
-                self.assertEqual(labels.count('100%'),3)
-                self.assertEqual(labels.count('N/A'),2)
-                self.assertEqual(len(figures[1].axes[0].collections),6)
+                self.assertEqual(labels.count('0%'),2)
+                self.assertEqual(labels.count('100%'),2)
+                self.assertEqual(figures[1].axes[1].containers[-1][0].get_width(),count)
                 namespace['load_base'].assert_not_called()
                 namespace['predict'].assert_not_called()
                 namespace['train_adapter'].assert_not_called()
                 plt.close('all')
 
-    def test_all_zero_base_metrics_are_visible_alongside_trained_scores(self):
+    def test_embedded_correct_json_gets_content_credit_without_strict_credit(self):
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         import pandas as pd
-        from candleprep.evaluation import score_predictions
-        records=[{'target':{'recoverable':True,'operations':['parse_number_words']}},
-                 {'target':{'recoverable':False,'operations':[]}}]
-        namespace={'pd':pd,'plt':plt,'display':Mock()}
+        records=[{'id':'positive','target':{'recoverable':True,'operations':['parse_number_words']}},
+                 {'id':'negative','target':{'recoverable':False,'operations':[]}}]
+        namespace={'pd':pd,'plt':plt,'display':Mock(),'json':json}
         load_definitions('comparison_display',namespace)
+        answers=[json.dumps(r['target']) for r in records]
         with patch.object(plt,'show'):
-            namespace['show_comparison']({'Before SFT':score_predictions(['bad']*2,records),
-                'After SFT':score_predictions([json.dumps(r['target']) for r in records],records)},'Two cases')
-        ax=plt.gca()
-        self.assertEqual([t.get_text() for t in ax.texts].count('0%'),4)
-        self.assertEqual([t.get_text() for t in ax.texts].count('100%'),4)
-        self.assertEqual(len(ax.collections),8)
-        self.assertTrue(all(float(c.get_offsets()[0,1])==0 for c in ax.collections[:4]))
+            namespace['show_comparison']({'Before SFT':['Explanation\n```json\n'+p+'\n```' for p in answers],
+                'After SFT':answers},records,'Two cases')
+        ax=plt.gcf().axes[0]
+        self.assertEqual([t.get_text() for t in ax.texts].count('0%'),2)
+        self.assertEqual([t.get_text() for t in ax.texts].count('100%'),2)
+        self.assertEqual(len(ax.collections),4)
+        self.assertTrue(all(float(c.get_offsets()[0,1])==0 for c in ax.collections[:2]))
         table=namespace['display'].call_args.args[0]
-        self.assertEqual(table.loc['Tool order (recoverable)','Before SFT'],'0/1 (0%)')
-        self.assertEqual(table.loc['Correct JSON plan','Before SFT'],'0/2 (0%)')
+        self.assertEqual(table.loc['Strict format','Before SFT'],'0/2')
+        self.assertEqual(table.loc['Full-plan content','Before SFT'],'2 correct; 0 wrong; 0 unscorable')
+        self.assertEqual(table.loc['Complete JSON found','Before SFT'],'2/2')
         plt.close('all')
 
-    def test_missing_baseline_metrics_are_reported_instead_of_displayed_as_zero(self):
+    def test_missing_baseline_responses_are_reported_instead_of_displayed_as_zero(self):
         import pandas as pd
         import matplotlib.pyplot as plt
         with tempfile.TemporaryDirectory() as temporary:
@@ -115,7 +118,7 @@ class TrainingFeedbackTests(unittest.TestCase):
             output=io.StringIO()
             with contextlib.redirect_stdout(output):
                 load_tag('results_display',namespace)
-            self.assertIn('Before-SFT metrics are missing',output.getvalue())
+            self.assertIn('Before-SFT responses are missing',output.getvalue())
             namespace['display'].assert_not_called()
 
 

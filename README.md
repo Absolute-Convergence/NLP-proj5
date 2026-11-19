@@ -45,7 +45,7 @@ not read the working directory's copy. See [the package README](candleprep/READM
 
 ## Notebook flow
 
-The notebook has 12 code cells / about 355 code lines: package installation;
+The notebook has 12 code cells / about 420 code lines: package installation;
 preparation and data/label previews; settings and cleanup; tokenization/model
 helpers; configurable base-model examples; visible starter-style LoRA training;
 primary training; the same examples afterward; immediate saved-history charts; and
@@ -64,16 +64,16 @@ Trainer consumes cached labels without generating responses during training.
 Section 4 controls how much training and demo generation to run:
 
 ```python
-TRAINING_EXAMPLES = 1000  # None uses the entire training split
+TRAINING_EXAMPLES = 3000  # None uses the entire training split
 DEMO_EXAMPLES = 5        # Matched before/after displays
-COMPARISON_EXAMPLES = 0  # Optional extra held-out cases per model
+COMPARISON_EXAMPLES = 10 # Optional extra held-out cases per model; 0 skips
 ```
 
 Training uses a random sample without replacement, selected reproducibly by
 `SEED`. Sampling preserves each complete corrupted CSV window and its verified
 JSON label; it never samples individual candle rows within a window or draws
 from validation/test. Only selected pairs are tokenized for training. The
-prepared dataset remains complete. The default 1,000 pairs use about one tenth
+prepared dataset remains complete. For example, 1,000 pairs use about one tenth
 the training work of 10,000; download/loading/validation time is additional.
 Use a positive count up to 10,000, or `None` for all pairs.
 
@@ -98,12 +98,30 @@ The handout requires rank exploration but does not prescribe 8/16/32 or a sweep.
 (default 5; range 1–1,000). With at least three cases, the selection includes
 positive repairs and an unrecoverable window. Their before/after metrics are
 saved by count, with trained results stored per rank. Section 10
-reads saved Trainer history and metric files to plot training/validation loss,
-teacher-forced target-token accuracy, and the configured demo's generated-answer results.
+reads saved Trainer history to plot training/validation loss and teacher-forced
+target-token accuracy. It rescores the saved raw before/after responses against
+the prepared validation labels to diagnose generated-answer performance.
 No model, inference job, or optional comparison is needed to draw those charts.
-The comparison table shows correct/total counts and percentages. Charts group
-the two models by metric, with numeric labels and markers even at 0%. Missing
-files are reported; tool-order accuracy is N/A if there are no recoverable cases.
+Strict JSON format and strict usable-tool-call success stay separate from content
+diagnostics. Content scoring can read exactly one complete JSON object from
+prose or Markdown fences. It never guesses missing fields, repairs unfinished
+JSON, selects between multiple objects, or coerces field types. Unknown tool
+names are wrong content, and extra fields can fail strict format while preserving
+the intended plan content. The original strict scorer and saved metrics are unchanged.
+
+Content charts show correct, wrong, and unscorable counts over the same cases.
+Unreadable/incomplete or ambiguous responses stay visible instead of becoming
+automatic semantic errors or being silently excluded. Tool-order content uses
+only examples labeled recoverable; N/A means there are no such cases. A per-case
+diagnostic table explains which answers could be read. These are diagnostic
+content measurements, not proof of general reasoning ability.
+
+The uploaded TAMU run's five-case baseline has one correct recoverability answer,
+one wrong answer, and three unscorable unfinished JSON plans under this rule.
+Its strict format score remains 0/5. The unmodified executed upload is preserved
+locally under ignored `tmp/tamu_run_before_scoring_fix.ipynb`. Existing responses
+can be rescored by updating and rerunning Section 10, then Section 11 for the
+same saved sample size. No training or new model generation is required.
 To change only the demo count, rerun Section 4, then Sections 6, 9, and 10; no
 retraining is needed. Section 6 generates/reuses the matching baseline count,
 Section 9 loads the saved adapter, and chart labels follow the selected count.
